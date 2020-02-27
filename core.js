@@ -147,6 +147,8 @@ export function travel() {
   STATE.TouchedGroup.forEach(callWatcher)
 }
 function callWatcher(obj) {
+  // Vue的observer对象键名
+  const VUE_OBERVER = '__ob__'
   if (obj && obj[VUE_OBERVER]) {
     // 让computed属性的watcher直接进入队列进行更新, 若有涉及页面显示的则会触发render watcher
     obj[VUE_OBERVER].dep.subs.forEach(updateWatcher)
