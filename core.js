@@ -142,99 +142,23 @@ function defProxy(obj, key, oldVal, rule) {
   })
 }
 
- * @param {*} oldVal 原始值
- */
-function defProxy(obj, key, oldVal, rule) {
-  const property = Object.getOwnPropertyDescriptor(obj, key)
-  const getter = property && property.get
-  const setter = property && property.set
-  const tag = obj[TAG]
-
-  // 真实数据
-  let realVal = null
-
-  const getCur = getter ? () => getter.call(obj) + '' : () => oldVal + ''
-
-  const reject = () => {
-    realVal = FAILD
+// 触发涉及的对象的getter
+export function travel() {
+  STATE.TouchedGroup.forEach(callWatcher)
+}
+function callWatcher(obj) {
+  if (obj && obj[VUE_OBERVER]) {
+    // 让computed属性的watcher直接进入队列进行更新, 若有涉及页面显示的则会触发render watcher
+    obj[VUE_OBERVER].dep.subs.forEach(updateWatcher)
   }
+}
 
-  const resolve = (response) => {
-    if (!realVal || realVal === AJAXING) {
-      realVal = response
-    }
+function updateWatcher(watcher) {
+  if (watcher.lazy) {
+    watcher.lazy = false
+    watcher.update()
+    watcher.lazy = true
+  } else {
+    watcher.update()
   }
-
-  Object.defineProperty(obj, key, {
-    enumerable: true,
-    configurable: true,
-    get() {
-      const curVal = getCur()
-      // 功能停止
-      if (STATE.Sleeping) {
-        return curVal
-      }
-      // 加入了严格模式，可能会存在没有合适的rule，只能直接展示了
-      if (!rule) {
-        return curVal
-      }
-      // 只有是当前分组且格式化规则类型需要允许请求的才进行切换控制
-      if (tag[key] === STATE.GroupId && STATE.ShowReal) {
-        if (rule.request === false) {
-          return curVal
-        }
-        if (STATE.ShowReal && realVal !== AJAXING && realVal !== FAILD) {
-          /**
-           * 全局切换控制展示规则
-           * 1. 若已在请求中, 直接返回foramtedVal,等待请求完成后进一步判断
-           * 2. 请求失败的,直接返回foramtedVal, 清空realVal,等待下一次get
-           * 3. 请求中又被重设的,该次请求结果跳过,清空realVal,等待下一次get
-           * 4. 请求成功,存下并刷新视图显示realVal,除非set了新的value否则切换就取已存的realVal
-           */
-          if (!realVal || realVal === RESET) {
-            realVal = AJAXING
-            // 装入小组中等待统一更新
-            request({
-              value: curVal,
-              type: rule.type,
-              resolve,
-              reject
-            })
-          } else {
-            return realVal
-          }
-        }
-      }
-      // 请求出错后只显示原值, 在下一次触发时再求值
-      if (realVal === FAILD) {
-        realVal = null
-      }
-      return rule.format(curVal)
-    },
-    set(setVal) {
-      if (validValue(setVal)) {
-        const curVal = getCur()
-        // eslint-disable-next-line
-        if (setVal === curVal || (setVal !== setVal && curVal !== curVal)) {
-          // for NaN
-          return
-        }
-
-        // 值变了, 对应的真实值要重新获取
-        realVal = RESET
-        // 更新新值对应的替换规则
-        rule = getRule(getCur(), key)
-
-        if (setter) {
-          setter.call(obj, setVal)
-        } else {
-          oldVal = setVal
-        }
-
-        storeSave(obj, key, setVal)
-      } else {
-        warn(`the key [${key}] must be string|number, skip set`)
-      }
-    }
-  })
 }
